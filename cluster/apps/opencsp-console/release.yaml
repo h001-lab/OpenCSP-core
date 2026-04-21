@@ -1,1 +1,43 @@
 ---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opencsp-console
+  namespace: opencsp-console
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: opencsp-console
+      version: "0.1.1"
+      sourceRef:
+        kind: HelmRepository
+        name: opencsp-console
+        namespace: flux-system
+  values:
+    be:
+      env:
+        APP_IAM_PROVIDER: "none"
+        APP_K8S_ENABLED: "false"
+      existingSecret: "opencsp-be-secret"
+
+    fe:
+      env:
+        NEXTAUTH_URL: "https://opencsp.avgmax.team"
+      existingSecret: "opencsp-fe-secret"
+
+    ingress:
+      enabled: true
+      className: "cilium"
+      annotations:
+        cert-manager.io/cluster-issuer: "selfsigned-issuer"
+        ingress.cilium.io/backend-protocol: "http"
+      tls:
+        - hosts:
+            - opencsp.avgmax.team
+          secretName: opencsp-console-tls
+      hosts:
+        - host: opencsp.avgmax.team
+          paths:
+            - path: /
+              pathType: Prefix
