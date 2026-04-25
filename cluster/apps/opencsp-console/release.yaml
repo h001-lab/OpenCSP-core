@@ -9,19 +9,23 @@ spec:
   chart:
     spec:
       chart: opencsp-console
-      version: "0.1.3"
+      version: "0.1.9"
       sourceRef:
         kind: HelmRepository
         name: opencsp-console
         namespace: flux-system
   values:
     be:
+      image:
+        tag: "0.1.9"
       env:
         APP_IAM_PROVIDER: "none"
-        APP_K8S_ENABLED: "false"
+        APP_K8S_ENABLED: "true"
       existingSecret: "opencsp-be-secret"
 
     fe:
+      image:
+        tag: "0.1.9"
       env:
         NEXTAUTH_URL: "https://opencsp.avgmax.team"
       existingSecret: "opencsp-fe-secret"
@@ -39,5 +43,21 @@ spec:
       hosts:
         - host: opencsp.avgmax.team
           paths:
+            # 1. 웹소켓 전용 라우팅: /api/console/ws 경로는 BFF(Next.js)를 거치지 않고 백엔드로 직접 연결
+            # Ingress는 더 구체적인 경로(Longest Prefix Match)를 우선하므로 웹소켓 요청만 백엔드로 직접 흐르게 됩니다.
+            - path: /api/console/ws
+              pathType: Prefix
+              backend:
+                service:
+                  name: opencsp-console-be
+                  port:
+                    number: 8080
+
+            # 2. 나머지 라우팅 (BFF 및 정적 파일): /api/auth 등 일반 BFF 요청을 포함한 모든 트래픽은 FE로 전달
             - path: /
               pathType: Prefix
+              backend:
+                service:
+                  name: opencsp-console-fe
+                  port:
+                    number: 3000
