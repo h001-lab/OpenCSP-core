@@ -56,4 +56,7 @@ spec:
     ingress:
       enabled: false
 
+    operator:
+      enabled: true
+
     # tests: false

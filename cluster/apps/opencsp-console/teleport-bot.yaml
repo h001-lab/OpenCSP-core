@@ -1,8 +1,6 @@
 ---
-# opencsp-be가 다른 유저의 인증서를 대리 발급하기 위한 봇 전용 Role
-# impersonate.users/roles를 '*'로 설정하면 모든 유저/역할로 대리 서명 가능
-apiVersion: resources.teleport.dev/v7
-kind: TeleportRole
+apiVersion: resources.teleport.dev/v1
+kind: TeleportRoleV7
 metadata:
   name: opencsp-impersonator
   namespace: teleport
@@ -11,17 +9,14 @@ spec:
     impersonate:
       users: ['*']
       roles: ['*']
-    # 봇이 Teleport API를 통해 유저 인증서를 직접 요청할 수 있도록 허용
     rules:
       - resources: ['user']
         verbs: ['list', 'read']
       - resources: ['role']
         verbs: ['list', 'read']
 ---
-# Machine ID 봇 계정 - opencsp-be 전용
-# 이 Bot 리소스가 생성되면 Teleport가 내부적으로 bot 유저와 기본 토큰을 생성함
 apiVersion: resources.teleport.dev/v1
-kind: TeleportBot
+kind: TeleportBotV1
 metadata:
   name: opencsp-be-bot
   namespace: teleport
@@ -29,18 +24,16 @@ spec:
   roles:
     - opencsp-impersonator
 ---
-# Kubernetes join method용 ProvisionToken
-# opencsp-console 네임스페이스의 opencsp-tbot SA를 가진 파드만 허용
 apiVersion: resources.teleport.dev/v2
 kind: TeleportProvisionToken
 metadata:
   name: opencsp-be-bot
   namespace: teleport
 spec:
-  roles:
-    - Bot
+  roles: [Bot]
   join_method: kubernetes
   bot_name: opencsp-be-bot
   kubernetes:
+    type: in_cluster
     allow:
       - service_account: "opencsp-console:opencsp-tbot"
