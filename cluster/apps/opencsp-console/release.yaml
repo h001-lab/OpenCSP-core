@@ -61,3 +61,60 @@ spec:
                   name: opencsp-console-fe
                   port:
                     number: 3000
+
+  # tbot 사이드카를 be Deployment에 주입
+  # Helm 차트가 extraContainers를 지원하지 않으므로 postRenderers로 직접 패치
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: opencsp-console-be
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: opencsp-console-be
+              spec:
+                template:
+                  spec:
+                    serviceAccountName: opencsp-tbot
+                    volumes:
+                      - name: tbot-identity
+                        emptyDir: {}
+                      - name: tbot-config
+                        configMap:
+                          name: tbot-config
+                    initContainers:
+                      # K8s 1.29+ native sidecar: restartPolicy: Always 로 파드 라이프사이클 동안 실행
+                      # 인증서 만료 전 자동 갱신 담당
+                      - name: tbot
+                        image: public.ecr.aws/gravitational/tbot:18.6.4
+                        restartPolicy: Always
+                        args:
+                          - start
+                          - --config=/etc/tbot/tbot.yaml
+                        volumeMounts:
+                          - name: tbot-identity
+                            mountPath: /var/tbot/identity
+                          - name: tbot-config
+                            mountPath: /etc/tbot
+                            readOnly: true
+                        securityContext:
+                          runAsNonRoot: true
+                          runAsUser: 65534
+                          allowPrivilegeEscalation: false
+                          readOnlyRootFilesystem: true
+                        resources:
+                          requests:
+                            cpu: 10m
+                            memory: 32Mi
+                          limits:
+                            memory: 64Mi
+                    containers:
+                      # be 컨테이너에 tbot-identity 볼륨 마운트 추가
+                      - name: opencsp-console-be
+                        volumeMounts:
+                          - name: tbot-identity
+                            mountPath: /var/tbot/identity
+                            readOnly: true

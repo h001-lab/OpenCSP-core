@@ -5,6 +5,7 @@ resources:
   # - teleport/secret-tls.yaml
   - teleport/release.yaml
   - teleport/ingress.yaml
+  - teleport/operator.yaml
   # - teleport/nodeport.yaml
   - semaphore/namespace.yaml
   - semaphore/release.yaml
