@@ -4,5 +4,4 @@ resources:
   - opencsp-console/namespace.yaml
   - opencsp-console/release.yaml
   - opencsp-console/secret.yaml
-  - opencsp-console/tbot-config.yaml
   - opencsp-console/teleport-bot.yaml
