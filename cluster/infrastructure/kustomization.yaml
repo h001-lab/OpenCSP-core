@@ -1,23 +1,39 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  # teleport -> 마이그레이션 완료 후 제거
   - teleport/namespace.yaml
-  # - teleport/secret-tls.yaml
+  # - teleport/secret-tls.yaml 
   - teleport/release.yaml
   - teleport/ingress.yaml
   # - teleport/operator.yaml
   # - teleport/nodeport.yaml
+
+  # teleport-miiml
+  - teleport-miiml/namespace.yaml
+  # - teleport-miiml/secret-tls.yaml --- IGNORE ---
+  - teleport-miiml/release.yaml
+  - teleport-miiml/ingress.yaml
+
   - semaphore/namespace.yaml
   - semaphore/release.yaml
   - semaphore/ingress.yaml
+  - semaphore/ingress-miiml.yaml
+  
   - tofu-controller/release.yaml
   - tofu-controller/secret.yaml
+
   - zitadel/namespace.yaml
   - zitadel/secret.yaml
   - zitadel/postgresql.yaml
   - zitadel/release.yaml
   - zitadel/ingress.yaml
   # - zitadel/gateway.yaml
+
+  # zitadel-miiml (miiml.org) - 검증 완료 후 기존 release/ingress 제거
+  # - zitadel/release-miiml.yaml
+  # - zitadel/ingress-miiml.yaml
+  
   - lago/namespace.yaml
   - lago/secret.yaml
   - lago/postgresql.yaml

@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: teleport-ingress
+  namespace: teleport-miiml
+  annotations:
+    kubernetes.io/ingress.class: "cilium"
+    ingress.cilium.io/backend-protocol: "https"
+    ingress.cilium.io/tls-passthrough: "true"
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts:
+        - teleport.miiml.org
+        - "*.teleport.miiml.org"
+      secretName: teleport-tls-all
+  rules:
+    - host: teleport.miiml.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: teleport-miiml-teleport-cluster
+                port:
+                  number: 443
+    - host: "*.teleport.miiml.org"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: teleport-miiml-teleport-cluster
+                port:
+                  number: 443

@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: semaphore-ingress-miiml
+  namespace: semaphore
+  annotations:
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
+    ingress.cilium.io/backend-protocol: "http"
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts:
+        - semaphore.miiml.org
+      secretName: semaphore-tls-miiml
+  rules:
+    - host: semaphore.miiml.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: semaphore
+                port:
+                  number: 3000

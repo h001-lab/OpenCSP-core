@@ -43,4 +43,7 @@ config
 .idea/
 
 # secrets
-secret.decrypted.yaml
+secret*.decrypted.yaml
+
+# Docs
+docs/
