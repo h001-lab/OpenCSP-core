@@ -4,7 +4,7 @@ metadata:
   name: zitadel-ingress-miiml
   namespace: zitadel
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
 spec:
   ingressClassName: cilium
   tls:

@@ -37,7 +37,7 @@ spec:
       enabled: true
       className: "cilium"
       annotations:
-        cert-manager.io/cluster-issuer: "letsencrypt-prod"
+        cert-manager.io/cluster-issuer: "selfsigned-issuer"
         ingress.cilium.io/backend-protocol: "http"
       tls:
         - hosts:
