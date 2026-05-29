@@ -58,5 +58,6 @@ spec:
 
     operator:
       enabled: true
+      installCRDs: never
 
     # tests: false
