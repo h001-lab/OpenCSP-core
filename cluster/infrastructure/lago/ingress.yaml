@@ -10,10 +10,10 @@ spec:
   ingressClassName: cilium
   tls:
   - hosts:
-    - lago.avgmax.team
+    - lago.miiml.org
     secretName: lago-front-tls
   rules:
-  - host: lago.avgmax.team
+  - host: lago.miiml.org
     http:
       paths:
       - path: /
@@ -36,10 +36,10 @@ spec:
   ingressClassName: cilium
   tls:
   - hosts:
-    - lago-api.avgmax.team
+    - lago-api.miiml.org
     secretName: lago-api-tls
   rules:
-  - host: lago-api.avgmax.team
+  - host: lago-api.miiml.org
     http:
       paths:
       - path: /

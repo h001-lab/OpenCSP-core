@@ -33,8 +33,8 @@ spec:
       valuesKey: values.yaml
 
   values:
-    apiUrl: "https://lago-api.avgmax.team"
-    frontUrl: "https://lago.avgmax.team"
+    apiUrl: "https://lago-api.miiml.org"
+    frontUrl: "https://lago.miiml.org"
 
     front:
       service:
