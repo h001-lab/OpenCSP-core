@@ -1,0 +1,8 @@
+apiVersion: resources.teleport.dev/v2
+kind: TeleportUserV2
+metadata:
+  name: admin
+  namespace: teleport-miiml
+spec:
+  roles:
+    - editor
