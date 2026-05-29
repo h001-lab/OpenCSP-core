@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zitadel-ingress-miiml
+  namespace: zitadel
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts:
+        - zitadel.miiml.org
+      secretName: zitadel-tls-miiml
+  rules:
+    - host: zitadel.miiml.org
+      http:
+        paths:
+          - path: /ui/v2/login
+            pathType: Prefix
+            backend:
+              service:
+                name: zitadel-miiml-login
+                port:
+                  number: 3000

@@ -14,6 +14,7 @@ resources:
   # - teleport-miiml/secret-tls.yaml --- IGNORE ---
   - teleport-miiml/release.yaml
   - teleport-miiml/ingress.yaml
+  - teleport-miiml/admin-user.yaml
 
   - semaphore/namespace.yaml
   - semaphore/release.yaml
@@ -31,8 +32,8 @@ resources:
   # - zitadel/gateway.yaml
 
   # zitadel-miiml (miiml.org) - 검증 완료 후 기존 release/ingress 제거
-  # - zitadel/release-miiml.yaml
-  # - zitadel/ingress-miiml.yaml
+  - zitadel/release-miiml.yaml
+  - zitadel/ingress-miiml.yaml
   
   - lago/namespace.yaml
   - lago/secret.yaml

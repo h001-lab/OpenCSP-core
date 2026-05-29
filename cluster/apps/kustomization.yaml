@@ -3,6 +3,11 @@ kind: Kustomization
 resources:
   - opencsp-console/namespace.yaml
   - opencsp-console/postgres.yaml
-  - opencsp-console/release.yaml
-  - opencsp-console/secret.yaml
   - opencsp-console/teleport-bot.yaml
+  - opencsp-console/secret.yaml
+  - opencsp-console/release.yaml
+  
+  # Blue/miiml.org - 검증 완료 후 위 3개 제거
+  - opencsp-console/teleport-bot-miiml.yaml
+  - opencsp-console/secret-miiml.yaml
+  - opencsp-console/release-miiml.yaml

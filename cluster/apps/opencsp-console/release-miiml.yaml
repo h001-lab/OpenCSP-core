@@ -1,0 +1,72 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opencsp-console-miiml
+  namespace: opencsp-console
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: opencsp-console
+      version: "0.1.14"
+      sourceRef:
+        kind: HelmRepository
+        name: opencsp-console
+        namespace: flux-system
+  values:
+    # 같은 namespace 내 리소스 이름 충돌 방지
+    fullnameOverride: "opencsp-console-miiml"
+
+    be:
+      image:
+        tag: "0.1.14"
+      env:
+        APP_IAM_PROVIDER: "none"
+        APP_K8S_ENABLED: "true"
+      existingSecret: "opencsp-be-secret-miiml"
+
+    fe:
+      image:
+        tag: "0.1.14"
+      env:
+        NEXTAUTH_URL: "https://opencsp.miiml.org"
+      existingSecret: "opencsp-fe-secret-miiml"
+
+    ingress:
+      enabled: true
+      className: "cilium"
+      annotations:
+        cert-manager.io/cluster-issuer: "letsencrypt-prod"
+        ingress.cilium.io/backend-protocol: "http"
+      tls:
+        - hosts:
+            - opencsp.miiml.org
+          secretName: opencsp-console-tls-miiml
+      hosts:
+        - host: opencsp.miiml.org
+          paths:
+            - path: /api/console/ws
+              pathType: Prefix
+              backend:
+                service:
+                  name: opencsp-console-be-miiml
+                  port:
+                    number: 8080
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: opencsp-console-fe-miiml
+                  port:
+                    number: 3000
+
+    pam:
+      provider: teleport
+      identityMountPath: /var/pam/identity
+      teleport:
+        authServer: "teleport-cluster-auth.teleport-miiml.svc.cluster.local:3025"
+        token: "opencsp-be-bot-miiml"
+        serviceAccountName: opencsp-tbot-miiml
+        image:
+          tag: "18.7.6"
