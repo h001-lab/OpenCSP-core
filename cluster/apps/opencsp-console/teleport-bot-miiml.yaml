@@ -2,7 +2,7 @@
 apiVersion: resources.teleport.dev/v1
 kind: TeleportRoleV7
 metadata:
-  name: opencsp-impersonator
+  name: opencsp-impersonator-miiml
   namespace: teleport-miiml
 spec:
   allow:
