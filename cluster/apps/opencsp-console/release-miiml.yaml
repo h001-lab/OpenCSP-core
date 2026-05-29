@@ -50,14 +50,14 @@ spec:
               pathType: Prefix
               backend:
                 service:
-                  name: opencsp-console-be-miiml
+                  name: opencsp-console-miiml-be
                   port:
                     number: 8080
             - path: /
               pathType: Prefix
               backend:
                 service:
-                  name: opencsp-console-fe-miiml
+                  name: opencsp-console-miiml-fe
                   port:
                     number: 3000
 
@@ -65,7 +65,7 @@ spec:
       provider: teleport
       identityMountPath: /var/pam/identity
       teleport:
-        authServer: "teleport-cluster-auth.teleport-miiml.svc.cluster.local:3025"
+        authServer: "teleport-miiml-teleport-cluster-auth.teleport-miiml.svc.cluster.local:3025"
         token: "opencsp-be-bot-miiml"
         serviceAccountName: opencsp-tbot-miiml
         image:
