@@ -27,7 +27,7 @@ metadata:
   namespace: teleport-miiml
 spec:
   roles:
-    - opencsp-impersonator
+    - opencsp-impersonator-miiml
 ---
 apiVersion: resources.teleport.dev/v2
 kind: TeleportProvisionToken
