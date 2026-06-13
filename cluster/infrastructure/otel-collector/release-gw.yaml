@@ -112,13 +112,42 @@ spec:
           send_batch_size: 1000
 
       exporters:
-        # 초기 확인용 - 운영 시 백엔드 익스포터로 교체
+        # ---------------------------------------------------------------
+        # [현재] Grafana 백엔드 (192.168.11.44)
+        # Prometheus OTLP: http://192.168.11.44:9090/api/v1/otlp/v1/metrics
+        #   → Prometheus 실행 시 --enable-feature=otlp-write-receiver 필요
+        # Loki OTLP:       http://192.168.11.44:3100/otlp
+        # Tempo: 미구성 (traces 파이프라인 비활성화)
+        # ---------------------------------------------------------------
+        otlphttp/metrics:
+          endpoint: http://192.168.11.44:9090/api/v1/otlp/v1/metrics
+          tls:
+            insecure: true
+
+        otlphttp/logs:
+          endpoint: http://192.168.11.44:3100/otlp
+          tls:
+            insecure: true
+
+        # ---------------------------------------------------------------
+        # [나중에] Kafka로 전환 시 아래 주석 해제 후
+        # pipelines.[signal].exporters 를 kafka/xxx 로 교체
+        # ---------------------------------------------------------------
+        # kafka/metrics:
+        #   brokers: ["kafka.kafka.svc:9092"]
+        #   topic: otel-metrics
+        #   encoding: otlp_proto
+        # kafka/logs:
+        #   brokers: ["kafka.kafka.svc:9092"]
+        #   topic: otel-logs
+        #   encoding: otlp_proto
+        # kafka/traces:
+        #   brokers: ["kafka.kafka.svc:9092"]
+        #   topic: otel-traces
+        #   encoding: otlp_proto
+
         debug:
           verbosity: normal
-
-        # 백엔드 연결 시 주석 해제 (예: Grafana Cloud, Alloy, VictoriaMetrics 등)
-        # otlphttp:
-        #   endpoint: http://your-backend:4318
 
       service:
         telemetry:
@@ -128,23 +157,17 @@ spec:
             address: 0.0.0.0:8888
 
         pipelines:
-          # 클러스터/파드 메트릭 파이프라인
           metrics:
             receivers: [otlp, k8s_cluster]
             processors: [memory_limiter, k8sattributes, batch]
-            exporters: [debug]
+            exporters: [otlphttp/metrics]
 
-          # 클러스터 이벤트 + 파드 로그 파이프라인
           logs:
             receivers: [otlp, k8sobjects]
             processors: [memory_limiter, k8sattributes, batch]
-            exporters: [debug]
+            exporters: [otlphttp/logs]
 
-          # 트레이스 파이프라인
-          traces:
-            receivers: [otlp]
-            processors: [memory_limiter, k8sattributes, batch]
-            exporters: [debug]
+          # traces: Tempo 미구성 - 필요 시 otlphttp/traces 또는 kafka/traces 추가
 
     resources:
       limits:
