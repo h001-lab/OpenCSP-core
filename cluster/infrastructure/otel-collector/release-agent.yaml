@@ -115,10 +115,6 @@ spec:
               id: extract-metadata
               from: attributes.log
               to: body
-            - type: metadata
-              id: add-metadata
-              resource:
-                com.docker.compose.project: EXPR(attributes["log.file.path"])
 
       processors:
         memory_limiter:
