@@ -10,20 +10,9 @@ spec:
   ingressClassName: cilium
   tls:
   - hosts:
-    - hubble.avgmax.team
     - hubble.miiml.org
     secretName: hubble-ui-tls
   rules:
-    - host: hubble.avgmax.team
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: hubble-ui
-                port:
-                  number: 80
     - host: hubble.miiml.org
       http:
         paths:
