@@ -151,6 +151,13 @@ spec:
                     replacement: "$1:9966"
 
       processors:
+        transform/service_name:
+          log_statements:
+            - context: resource
+              statements:
+                - set(attributes["service.name"], attributes["k8s.deployment.name"]) where attributes["k8s.deployment.name"] != nil
+                - set(attributes["service.name"], attributes["k8s.pod.name"]) where attributes["service.name"] == nil and attributes["k8s.pod.name"] != nil
+                - set(attributes["service.name"], "k8s-events") where attributes["service.name"] == nil
         memory_limiter:
           check_interval: 1s
           limit_percentage: 75
@@ -184,7 +191,7 @@ spec:
         # Tempo: 미구성 (traces 파이프라인 비활성화)
         # ---------------------------------------------------------------
         otlp_http/metrics:
-          endpoint: http://192.168.11.44:9090/api/v1/otlp/v1/metrics
+          endpoint: http://192.168.11.44:9090/api/v1/otlp  # exporter가 /v1/metrics 자동 append
           tls:
             insecure: true
 
@@ -228,7 +235,7 @@ spec:
 
           logs:
             receivers: [otlp, k8sobjects]
-            processors: [memory_limiter, k8s_attributes, batch]
+            processors: [memory_limiter, k8s_attributes, transform/service_name, batch]
             exporters: [otlp_http/logs]
 
           # traces: Tempo 미구성 - 필요 시 otlp_http/traces 또는 kafka/traces 추가
