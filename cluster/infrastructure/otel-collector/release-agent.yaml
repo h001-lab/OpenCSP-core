@@ -30,7 +30,7 @@ spec:
       name: otel-collector-agent
       rules:
         - apiGroups: [""]
-          resources: [pods, nodes, nodes/metrics, namespaces, endpoints]
+          resources: [pods, nodes, nodes/metrics, nodes/stats, nodes/proxy, namespaces, endpoints]
           verbs: [get, list, watch]
         - apiGroups: [apps]
           resources: [replicasets]
@@ -82,6 +82,7 @@ spec:
           include_file_path: true
           include_file_name: false
           operators:
+            # 1단계: 컨테이너 런타임 wrapper 포맷 파싱
             - type: router
               id: get-format
               routes:
@@ -92,14 +93,14 @@ spec:
               default: parser-containerd
             - type: json_parser
               id: parser-docker
-              output: extract-metadata
+              output: extract-k8s-meta
               timestamp:
                 parse_from: attributes.time
                 layout: "%Y-%m-%dT%H:%M:%S.%LZ"
             - type: regex_parser
               id: parser-crio
               regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
-              output: extract-metadata
+              output: extract-k8s-meta
               timestamp:
                 parse_from: attributes.time
                 layout_type: gotime
@@ -107,14 +108,53 @@ spec:
             - type: regex_parser
               id: parser-containerd
               regex: '^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
-              output: extract-metadata
+              output: extract-k8s-meta
               timestamp:
                 parse_from: attributes.time
                 layout: "%Y-%m-%dT%H:%M:%SZ"
+
+            # 2단계: 파일 경로에서 k8s 메타데이터 추출
+            # 경로 형식: /var/log/pods/<namespace>_<pod-name>_<uid>/<container>/<n>.log
+            - type: regex_parser
+              id: extract-k8s-meta
+              regex: '^/var/log/pods/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<pod_uid>[^/]+)/(?P<container_name>[^/]+)/\d+\.log$'
+              parse_from: attributes["log.file.path"]
+              parse_to: attributes
+              output: move-namespace
             - type: move
-              id: extract-metadata
+              id: move-namespace
+              from: attributes.namespace
+              to: attributes["k8s.namespace.name"]
+              output: move-pod-name
+            - type: move
+              id: move-pod-name
+              from: attributes.pod_name
+              to: attributes["k8s.pod.name"]
+              output: move-pod-uid
+            - type: move
+              id: move-pod-uid
+              from: attributes.pod_uid
+              to: attributes["k8s.pod.uid"]
+              output: move-container-name
+            - type: move
+              id: move-container-name
+              from: attributes.container_name
+              to: attributes["k8s.container.name"]
+              output: move-body
+
+            # 3단계: 로그 내용을 body로 이동
+            - type: move
+              id: move-body
               from: attributes.log
               to: body
+              output: try-parse-json
+
+            # 4단계: body가 JSON이면 구조화 파싱 (app 레벨 structured log 지원)
+            - type: json_parser
+              id: try-parse-json
+              if: 'body matches "^\\s*\\{"'
+              parse_from: body
+              parse_to: attributes
 
       processors:
         memory_limiter:
@@ -127,6 +167,14 @@ spec:
           passthrough: false
           filter:
             node_from_env_var: K8S_NODE_NAME
+          # filelog은 네트워크 연결이 없으므로 파일 경로에서 추출한 pod UID로 매핑
+          pod_association:
+            - sources:
+                - from: resource_attribute
+                  name: k8s.pod.uid
+            - sources:
+                - from: record_attribute
+                  name: k8s.pod.uid
           extract:
             metadata:
               - k8s.pod.name
@@ -138,6 +186,13 @@ spec:
               - k8s.statefulset.name
               - k8s.daemonset.name
               - k8s.container.name
+            labels:
+              - tag_name: app
+                key: app
+                from: pod
+              - tag_name: app.kubernetes.io/name
+                key: app.kubernetes.io/name
+                from: pod
 
         batch:
           timeout: 10s
@@ -146,7 +201,7 @@ spec:
       exporters:
         # gateway로 포워딩
         otlp:
-          endpoint: otel-collector-gw-opentelemetry-collector.otel-collector.svc.cluster.local:4317
+          endpoint: otel-collector-otel-collector-gw-opentelemetry-collector.otel-collector.svc.cluster.local:4317
           tls:
             insecure: true
 

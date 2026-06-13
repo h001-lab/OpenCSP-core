@@ -30,7 +30,7 @@ spec:
       name: otel-collector-gw
       rules:
         - apiGroups: [""]
-          resources: [pods, nodes, nodes/metrics, namespaces, endpoints, services, events, resourcequotas]
+          resources: [pods, nodes, nodes/metrics, namespaces, endpoints, services, events, resourcequotas, replicationcontrollers]
           verbs: [get, list, watch]
         - apiGroups: [apps]
           resources: [replicasets, deployments, daemonsets, statefulsets]
