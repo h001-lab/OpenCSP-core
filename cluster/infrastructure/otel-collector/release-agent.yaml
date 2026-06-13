@@ -64,7 +64,7 @@ spec:
     config:
       receivers:
         # 노드/파드 리소스 메트릭 (kubelet stats API 사용)
-        kubeletstats:
+        kubelet_stats:
           collection_interval: 30s
           auth_type: serviceAccount
           endpoint: "https://${env:K8S_NODE_NAME}:10250"
@@ -73,7 +73,7 @@ spec:
           extra_metadata_labels: [container.id]
 
         # 파드 컨테이너 로그 수집 (파일 기반)
-        filelog:
+        file_log:
           include:
             - /var/log/pods/*/*/*.log
           exclude:
@@ -162,7 +162,7 @@ spec:
           limit_percentage: 75
           spike_limit_percentage: 15
 
-        k8sattributes:
+        k8s_attributes:
           auth_type: serviceAccount
           passthrough: false
           filter:
@@ -200,7 +200,7 @@ spec:
 
       exporters:
         # gateway로 포워딩
-        otlp:
+        otlp_grpc:
           endpoint: otel-collector-otel-collector-gw-opentelemetry-collector.otel-collector.svc.cluster.local:4317
           tls:
             insecure: true
@@ -212,13 +212,13 @@ spec:
 
         pipelines:
           metrics:
-            receivers: [kubeletstats]
-            processors: [memory_limiter, k8sattributes, batch]
-            exporters: [otlp]
+            receivers: [kubelet_stats]
+            processors: [memory_limiter, k8s_attributes, batch]
+            exporters: [otlp_grpc]
           logs:
-            receivers: [filelog]
-            processors: [memory_limiter, k8sattributes, batch]
-            exporters: [otlp]
+            receivers: [file_log]
+            processors: [memory_limiter, k8s_attributes, batch]
+            exporters: [otlp_grpc]
 
     extraEnvs:
       - name: K8S_NODE_NAME
