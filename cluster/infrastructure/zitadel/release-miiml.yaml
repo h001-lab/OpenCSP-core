@@ -55,14 +55,6 @@ spec:
               Username: postgres
               SSL:
                 Mode: disable
-        SystemAPIUsers:
-          - system-user-1:
-              KeyData: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUF2MytPVnp2bnk1bTdZcG45Q0IraQpzdGJPbTdjeDE1UnJTZXN2UG1xQUJIdDBoMjB2RzdJVmEzQjVKRk5KK00rMjBPZ0szeUpKMzV3S2piVEo1dUNJClU5ZStXbnI1VE8wWVFNdHI5ajFhU1RGNXc4T2Mza2pqOVE0ellnazNLMWk5YU9UUnRtTVRQL0FieExkZldJbzMKL2FxR1hVWlhaQWZwMnJOUkt0ckxkaTZsWEo1ckFkeVJyeFhLanovTC9XQjFUNVZCcmN6c09RdGtkMW1CbUJqMQo5Y01ndC9Kbno2aE1PM1VueWFjclpVUEpSeEs2YXdUY1pkeVZDWHMwdXlFUVgyYjlQRnUwMlpSa3ByZGs1QUdCCmEzaFN6M3ZYbDl2amlMNTFnbnFWaXJGK3orTjFtVExnOEVxRjZYUnJkVUZ2QXoyU2k0V050UmxMazNVamp6MDAKTlFJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=="
-              Memberships:
-                - MemberType: System
-                  Roles:
-                    - "SYSTEM_OWNER"
-                    - "IAM_OWNER"
     service:
       type: NodePort
       protocol: grpc
