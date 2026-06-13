@@ -41,3 +41,8 @@ resources:
   - lago/redis.yaml
   - lago/release.yaml
   - lago/ingress.yaml
+
+  # otel-collector: 클러스터 전체 메트릭/로그 수집
+  - otel-collector/namespace.yaml
+  - otel-collector/release-gw.yaml    # gateway (deployment) - 클러스터 메트릭 + OTLP 수신
+  - otel-collector/release-agent.yaml  # agent (daemonset) - 노드 메트릭 + 파드 로그

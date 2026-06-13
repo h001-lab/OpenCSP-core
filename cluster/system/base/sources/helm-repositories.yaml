@@ -80,3 +80,12 @@ spec:
   type: oci
   interval: 1h
   url: oci://ghcr.io/h001-lab/charts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: opentelemetry
+  namespace: flux-system
+spec:
+  interval: 24h
+  url: https://open-telemetry.github.io/opentelemetry-helm-charts

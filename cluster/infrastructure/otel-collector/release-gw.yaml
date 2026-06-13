@@ -1,0 +1,152 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: otel-collector-gw
+  namespace: flux-system
+spec:
+  targetNamespace: otel-collector
+  interval: 30m
+  chart:
+    spec:
+      chart: opentelemetry-collector
+      version: "0.158.1"
+      sourceRef:
+        kind: HelmRepository
+        name: opentelemetry
+        namespace: flux-system
+  values:
+    mode: deployment
+    replicaCount: 1
+
+    serviceAccount:
+      create: true
+      name: otel-collector-gw
+
+    clusterRole:
+      create: true
+      name: otel-collector-gw
+      rules:
+        - apiGroups: [""]
+          resources: [pods, nodes, nodes/metrics, namespaces, endpoints, services, events, resourcequotas]
+          verbs: [get, list, watch]
+        - apiGroups: [apps]
+          resources: [replicasets, deployments, daemonsets, statefulsets]
+          verbs: [get, list, watch]
+        - apiGroups: [batch]
+          resources: [jobs, cronjobs]
+          verbs: [get, list, watch]
+        - apiGroups: [autoscaling]
+          resources: [horizontalpodautoscalers]
+          verbs: [get, list, watch]
+        - nonResourceURLs: [/metrics, /metrics/cadvisor]
+          verbs: [get]
+
+    service:
+      type: ClusterIP
+
+    ports:
+      otlp:
+        enabled: true
+        containerPort: 4317
+        servicePort: 4317
+        protocol: TCP
+      otlp-http:
+        enabled: true
+        containerPort: 4318
+        servicePort: 4318
+        protocol: TCP
+      metrics:
+        enabled: true
+        containerPort: 8888
+        servicePort: 8888
+        protocol: TCP
+
+    config:
+      receivers:
+        # 파드/앱이 직접 메트릭·로그·트레이스를 밀어넣는 수신 엔드포인트
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+
+        # 클러스터 레벨 메트릭 (디플로이먼트/파드 상태, 노드 allocatable 등)
+        k8s_cluster:
+          collection_interval: 30s
+          node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
+          allocatable_types_to_report: [cpu, memory, pods, storage]
+
+        # 클러스터 이벤트를 로그로 수집 (Warning 이벤트 포함)
+        k8sobjects:
+          objects:
+            - name: events
+              mode: watch
+
+      processors:
+        memory_limiter:
+          check_interval: 1s
+          limit_percentage: 75
+          spike_limit_percentage: 15
+
+        # 파드 메타데이터를 속성으로 붙임 (namespace, pod, node, deployment 등)
+        k8sattributes:
+          auth_type: serviceAccount
+          passthrough: false
+          extract:
+            metadata:
+              - k8s.pod.name
+              - k8s.pod.uid
+              - k8s.namespace.name
+              - k8s.node.name
+              - k8s.deployment.name
+              - k8s.replicaset.name
+              - k8s.statefulset.name
+              - k8s.daemonset.name
+
+        batch:
+          timeout: 10s
+          send_batch_size: 1000
+
+      exporters:
+        # 초기 확인용 - 운영 시 백엔드 익스포터로 교체
+        debug:
+          verbosity: normal
+
+        # 백엔드 연결 시 주석 해제 (예: Grafana Cloud, Alloy, VictoriaMetrics 등)
+        # otlphttp:
+        #   endpoint: http://your-backend:4318
+
+      service:
+        telemetry:
+          logs:
+            level: info
+          metrics:
+            address: 0.0.0.0:8888
+
+        pipelines:
+          # 클러스터/파드 메트릭 파이프라인
+          metrics:
+            receivers: [otlp, k8s_cluster]
+            processors: [memory_limiter, k8sattributes, batch]
+            exporters: [debug]
+
+          # 클러스터 이벤트 + 파드 로그 파이프라인
+          logs:
+            receivers: [otlp, k8sobjects]
+            processors: [memory_limiter, k8sattributes, batch]
+            exporters: [debug]
+
+          # 트레이스 파이프라인
+          traces:
+            receivers: [otlp]
+            processors: [memory_limiter, k8sattributes, batch]
+            exporters: [debug]
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi

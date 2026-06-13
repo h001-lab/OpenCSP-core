@@ -1,0 +1,181 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: otel-collector-agent
+  namespace: flux-system
+spec:
+  targetNamespace: otel-collector
+  interval: 30m
+  chart:
+    spec:
+      chart: opentelemetry-collector
+      version: "0.158.1"
+      sourceRef:
+        kind: HelmRepository
+        name: opentelemetry
+        namespace: flux-system
+  values:
+    # 각 노드에 배포하여 노드 메트릭·파드 로그를 수집
+    mode: daemonset
+
+    serviceAccount:
+      create: true
+      name: otel-collector-agent
+
+    clusterRole:
+      create: true
+      name: otel-collector-agent
+      rules:
+        - apiGroups: [""]
+          resources: [pods, nodes, nodes/metrics, namespaces, endpoints]
+          verbs: [get, list, watch]
+        - apiGroups: [apps]
+          resources: [replicasets]
+          verbs: [get, list, watch]
+        - nonResourceURLs: [/metrics, /metrics/cadvisor]
+          verbs: [get]
+
+    # 노드 메트릭 수집을 위해 호스트 네트워크 및 볼륨 마운트 필요
+    hostNetwork: false
+
+    extraVolumes:
+      - name: varlogpods
+        hostPath:
+          path: /var/log/pods
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+
+    extraVolumeMounts:
+      - name: varlogpods
+        mountPath: /var/log/pods
+        readOnly: true
+      - name: varlibdockercontainers
+        mountPath: /var/lib/docker/containers
+        readOnly: true
+
+    securityContext:
+      runAsUser: 0  # 로그 파일 읽기 위해 root 필요
+      runAsGroup: 0
+
+    config:
+      receivers:
+        # 노드/파드 리소스 메트릭 (kubelet stats API 사용)
+        kubeletstats:
+          collection_interval: 30s
+          auth_type: serviceAccount
+          endpoint: "https://${env:K8S_NODE_NAME}:10250"
+          insecure_skip_verify: true
+          metric_groups: [node, pod, container, volume]
+          extra_metadata_labels: [container.id]
+
+        # 파드 컨테이너 로그 수집 (파일 기반)
+        filelog:
+          include:
+            - /var/log/pods/*/*/*.log
+          exclude:
+            - /var/log/pods/otel-collector_*/*/*.log  # self 제외
+          start_at: end
+          include_file_path: true
+          include_file_name: false
+          operators:
+            - type: router
+              id: get-format
+              routes:
+                - output: parser-docker
+                  expr: 'body matches "^\\{"'
+                - output: parser-crio
+                  expr: 'body matches "^[^ Z]+ "'
+              default: parser-containerd
+            - type: json_parser
+              id: parser-docker
+              output: extract-metadata
+              timestamp:
+                parse_from: attributes.time
+                layout: "%Y-%m-%dT%H:%M:%S.%LZ"
+            - type: regex_parser
+              id: parser-crio
+              regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+              output: extract-metadata
+              timestamp:
+                parse_from: attributes.time
+                layout_type: gotime
+                layout: "2006-01-02T15:04:05.999999999Z07:00"
+            - type: regex_parser
+              id: parser-containerd
+              regex: '^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+              output: extract-metadata
+              timestamp:
+                parse_from: attributes.time
+                layout: "%Y-%m-%dT%H:%M:%SZ"
+            - type: move
+              id: extract-metadata
+              from: attributes.log
+              to: body
+            - type: metadata
+              id: add-metadata
+              resource:
+                com.docker.compose.project: EXPR(attributes["log.file.path"])
+
+      processors:
+        memory_limiter:
+          check_interval: 1s
+          limit_percentage: 75
+          spike_limit_percentage: 15
+
+        k8sattributes:
+          auth_type: serviceAccount
+          passthrough: false
+          filter:
+            node_from_env_var: K8S_NODE_NAME
+          extract:
+            metadata:
+              - k8s.pod.name
+              - k8s.pod.uid
+              - k8s.namespace.name
+              - k8s.node.name
+              - k8s.deployment.name
+              - k8s.replicaset.name
+              - k8s.statefulset.name
+              - k8s.daemonset.name
+              - k8s.container.name
+
+        batch:
+          timeout: 10s
+          send_batch_size: 1000
+
+      exporters:
+        # gateway로 포워딩
+        otlp:
+          endpoint: otel-collector-gw-opentelemetry-collector.otel-collector.svc.cluster.local:4317
+          tls:
+            insecure: true
+
+      service:
+        telemetry:
+          logs:
+            level: info
+
+        pipelines:
+          metrics:
+            receivers: [kubeletstats]
+            processors: [memory_limiter, k8sattributes, batch]
+            exporters: [otlp]
+          logs:
+            receivers: [filelog]
+            processors: [memory_limiter, k8sattributes, batch]
+            exporters: [otlp]
+
+    env:
+      - name: K8S_NODE_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
