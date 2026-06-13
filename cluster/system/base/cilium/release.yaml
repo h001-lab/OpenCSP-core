@@ -69,12 +69,35 @@ spec:
       
     installCRDs: true
 
+    # Cilium agent 메트릭 엔드포인트 (포트 9962)
+    prometheus:
+      enabled: true
+      port: 9962
+
     operator:
       replicas: 1
+      prometheus:
+        enabled: true
+        port: 9963
 
     hubble:
       enabled: true
       relay:
         enabled: true
+        prometheus:
+          enabled: true
+          port: 9966
       ui:
         enabled: true
+      # Hubble 플로우 기반 메트릭 (포트 9965, Cilium agent 파드에서 노출)
+      metrics:
+        port: 9965
+        enableOpenMetrics: true
+        enabled:
+          - dns
+          - drop
+          - tcp
+          - flow
+          - icmp
+          - http
+          - port-distribution

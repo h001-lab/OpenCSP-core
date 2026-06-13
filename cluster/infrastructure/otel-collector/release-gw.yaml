@@ -86,6 +86,70 @@ spec:
             - name: events
               mode: watch
 
+        # Cilium / Hubble 메트릭 스크래핑
+        prometheus:
+          config:
+            scrape_configs:
+              # Cilium agent 운영 메트릭 (DaemonSet, 포트 9962)
+              - job_name: cilium-agent
+                kubernetes_sd_configs:
+                  - role: pod
+                    namespaces:
+                      names: [kube-system]
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+                    regex: cilium
+                    action: keep
+                  - source_labels: [__meta_kubernetes_pod_ip]
+                    target_label: __address__
+                    replacement: "$1:9962"
+                  - source_labels: [__meta_kubernetes_pod_node_name]
+                    target_label: node
+
+              # Hubble 플로우 메트릭 (Cilium agent 파드, 포트 9965)
+              - job_name: cilium-hubble
+                kubernetes_sd_configs:
+                  - role: pod
+                    namespaces:
+                      names: [kube-system]
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+                    regex: cilium
+                    action: keep
+                  - source_labels: [__meta_kubernetes_pod_ip]
+                    target_label: __address__
+                    replacement: "$1:9965"
+                  - source_labels: [__meta_kubernetes_pod_node_name]
+                    target_label: node
+
+              # Cilium operator 메트릭 (포트 9963)
+              - job_name: cilium-operator
+                kubernetes_sd_configs:
+                  - role: pod
+                    namespaces:
+                      names: [kube-system]
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_pod_label_name]
+                    regex: cilium-operator
+                    action: keep
+                  - source_labels: [__meta_kubernetes_pod_ip]
+                    target_label: __address__
+                    replacement: "$1:9963"
+
+              # Hubble relay 운영 메트릭 (포트 9966)
+              - job_name: hubble-relay
+                kubernetes_sd_configs:
+                  - role: pod
+                    namespaces:
+                      names: [kube-system]
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+                    regex: hubble-relay
+                    action: keep
+                  - source_labels: [__meta_kubernetes_pod_ip]
+                    target_label: __address__
+                    replacement: "$1:9966"
+
       processors:
         memory_limiter:
           check_interval: 1s
@@ -158,7 +222,7 @@ spec:
 
         pipelines:
           metrics:
-            receivers: [otlp, k8s_cluster]
+            receivers: [otlp, k8s_cluster, prometheus]
             processors: [memory_limiter, k8s_attributes, batch]
             exporters: [otlp_http/metrics]
 
