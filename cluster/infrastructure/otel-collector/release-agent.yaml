@@ -226,6 +226,9 @@ spec:
           fieldRef:
             fieldPath: spec.nodeName
 
+    tolerations:
+      - operator: "Exists"
+
     resources:
       limits:
         cpu: 500m
