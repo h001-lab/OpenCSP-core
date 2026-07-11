@@ -1,0 +1,33 @@
+# kubescape-operator: 클러스터 보안 자세(posture) 지속 스캔
+# NSA / MITRE ATT&CK / CIS 등 내장 프레임워크 기준으로 컴플라이언스 및 오구성을 평가한다.
+# FSI(금융보안원) 등 커스텀 조건은 Framework CRD 로 별도 등록해 함께 스캔할 수 있다. (README 참고)
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kubescape-operator
+  namespace: flux-system
+spec:
+  targetNamespace: security-scanning
+  interval: 30m
+  chart:
+    spec:
+      chart: kubescape-operator
+      version: "1.40.2" # 2026-05, latest chart version
+      sourceRef:
+        kind: HelmRepository
+        name: kubescape
+        namespace: flux-system
+  values:
+    clusterName: opencsp-core
+    capabilities:
+      # 오구성/컴플라이언스 스캔 (프레임워크 기반)
+      configurationScan: enable
+      # 주기적 재스캔 (드리프트 감지)
+      continuousScan: enable
+      # 이미지 취약점 스캔
+      vulnerabilityScan: enable
+      # 노드 단위 점검
+      nodeScan: enable
+      # 런타임 관련 부가 기능은 필요 시 활성화 (리소스 사용량 증가)
+      relevancy: disable
+      networkPolicyService: disable

@@ -1,0 +1,88 @@
+# scorecard: kube-bench(CIS) + kubescape(posture) 결과를 한 표로 stdout 출력한다.
+# 결과 CR/ConfigMap 을 만들지 않으므로 클러스터에 히스토리가 쌓이지 않는다.
+#   - 히스토리는 stdout → otel-collector 로그 수집으로 관측 백엔드가 담당
+#   - Job/Pod 는 ttlSecondsAfterFinished + history limit 으로 자동 정리
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hardening-scorecard
+  namespace: security-scanning
+spec:
+  schedule: "30 3 * * *" # kube-bench(03:00) 이후 집계
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1 # 완료 Job 1개만 보관
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600 # 완료 1h 뒤 Job/Pod 자동 삭제
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: hardening-scorecard
+        spec:
+          serviceAccountName: hardening-scorecard
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: scorecard
+              # kubectl + jq 포함 이미지. 클러스터 버전에 맞춰 태그 조정 가능.
+              image: alpine/k8s:1.31.1
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: HOME
+                  value: /tmp # kubectl 캐시(/tmp/.kube)용 쓰기 가능 경로
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -u
+                  echo "===== Cluster Hardening Scorecard ($(date -u +%FT%TZ)) ====="
+
+                  echo "--- kube-bench (CIS) ---"
+                  POD=$(kubectl -n security-scanning get pods \
+                    -l app.kubernetes.io/name=kube-bench \
+                    --sort-by=.metadata.creationTimestamp -o name 2>/dev/null | tail -1)
+                  if [ -n "$POD" ]; then
+                    kubectl -n security-scanning logs "$POD" 2>/dev/null \
+                      | grep -E "== Summary|checks (PASS|FAIL|WARN|INFO)" \
+                      || echo "  (요약 라인 없음)"
+                  else
+                    echo "  kube-bench 파드 없음 (아직 미실행)"
+                  fi
+
+                  echo "--- kubescape configuration scan summaries ---"
+                  kubectl get workloadconfigurationscansummaries -A 2>/dev/null \
+                    || echo "  요약 리소스 없음 (operator 미준비?)"
+
+                  echo "--- kubescape compliance score ---"
+                  kubectl get workloadconfigurationscans -A -o json 2>/dev/null | jq -r '
+                    [.items[].spec.controls[]?] as $c
+                    | ($c | map(select(.status.status=="passed")) | length) as $p
+                    | ($c | map(select(.status.status=="failed")) | length) as $f
+                    | "passed=\($p) failed=\($f) score=\(if ($p+$f)>0 then (($p*100)/($p+$f)|floor) else 0 end)%"' \
+                    || echo "  점수 계산 실패 (CR 구조 확인 필요)"
+
+                  echo "===== end ====="
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

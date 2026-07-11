@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security-scanning
+  labels:
+    # kube-bench 는 hostPID / 호스트 경로 마운트가 필요하므로 privileged 프로필을 허용한다.
+    # (스캐너 전용 네임스페이스이며, 일반 워크로드는 배포하지 않는다)
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    # baseline VAP 강제 대상에서 제외 (스캐너 파드가 차단되지 않도록)
+    hardening.opencsp.io/baseline: ignore

@@ -1,0 +1,59 @@
+# scorecard CronJob 전용 최소 권한 RBAC
+# - kubescape 결과 CR(cluster-wide) 읽기
+# - security-scanning 네임스페이스의 kube-bench 파드 로그 읽기
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hardening-scorecard
+  namespace: security-scanning
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hardening-scorecard-reader
+rules:
+  - apiGroups: ["spdx.softwarecomposition.kubescape.io"]
+    resources:
+      - workloadconfigurationscans
+      - workloadconfigurationscansummaries
+      - configurationscansummaries
+      - vulnerabilitymanifestsummaries
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hardening-scorecard-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hardening-scorecard-reader
+subjects:
+  - kind: ServiceAccount
+    name: hardening-scorecard
+    namespace: security-scanning
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hardening-scorecard-logs
+  namespace: security-scanning
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hardening-scorecard-logs
+  namespace: security-scanning
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hardening-scorecard-logs
+subjects:
+  - kind: ServiceAccount
+    name: hardening-scorecard
+    namespace: security-scanning

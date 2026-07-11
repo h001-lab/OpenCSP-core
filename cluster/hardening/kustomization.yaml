@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ── 클러스터 하드닝 레이어 ──
+# 스캐너(kube-bench, kubescape)는 상시 적용, 강제 정책(VAP)은 components 로 선택 적용한다.
+resources:
+  - scanning/namespace.yaml
+  - scanning/kube-bench.yaml         # CIS 벤치마크 스캔 (CronJob)
+  - scanning/kubescape-release.yaml  # posture 스캔 (HelmRelease)
+  - scorecard/rbac.yaml              # scorecard 전용 최소 권한 RBAC
+  - scorecard/cronjob.yaml           # kube-bench+kubescape 집계 → stdout (CR 미생성)
+
+# ── 조건 선택 적용 (주석 해제로 on/off) ──
+# baseline : 전역 강제 (시스템/opt-out 네임스페이스 제외), PSS baseline
+# restricted : opt-in 강제 (ns 라벨 hardening.opencsp.io/restricted=enforce), PSS restricted
+# fsi : opt-in 강제 (ns 라벨 hardening.opencsp.io/fsi=enforce), 금융보안 커스텀 조건
+components:
+  - components/baseline
+  # - components/restricted
+  # - components/fsi

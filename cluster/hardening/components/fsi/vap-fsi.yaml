@@ -1,0 +1,91 @@
+# ── FSI(금융보안원) 커스텀 하드닝 조건 ──
+# 금융권 클라우드 보안 가이드에 대응하는 추가 통제:
+#   1) 신뢰 레지스트리 allowlist (무결성/공급망)  ← ConfigMap 파라미터로 편집 가능
+#   2) :latest 금지 + 명시 태그/digest 요구 (변경 추적성)
+#   3) readOnlyRootFilesystem 강제 (무결성)
+#   4) cpu/memory limits 강제 (가용성/자원고갈 방어)
+# opt-in: 네임스페이스에 hardening.opencsp.io/fsi=enforce 라벨이 있어야 강제된다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hardening-fsi-params
+  namespace: security-scanning
+data:
+  # FSI 신뢰 레지스트리 allowlist (콤마 구분, prefix 매칭). 환경에 맞게 편집한다.
+  allowedRegistries: "ghcr.io/h001-lab/,registry.k8s.io/,docker.io/aquasec/,quay.io/kubescape/"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hardening-fsi
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: allContainers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+        (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+    - name: allowedRegistries
+      expression: "params.data['allowedRegistries'].split(',')"
+  validations:
+    # 1) 신뢰 레지스트리 allowlist
+    - expression: >-
+        variables.allContainers.all(c,
+          variables.allowedRegistries.exists(r, c.image.startsWith(r)))
+      messageExpression: >-
+        "FSI: 허용되지 않은 이미지 레지스트리입니다. 허용 prefix: " + params.data['allowedRegistries']
+      reason: Forbidden
+    # 2) :latest 금지 + 명시 태그/digest 요구
+    - expression: >-
+        variables.allContainers.all(c,
+          !c.image.endsWith(':latest') &&
+          (c.image.contains('@sha256:') ||
+           c.image.substring(c.image.lastIndexOf('/') + 1).contains(':')))
+      message: "FSI: 이미지에 명시적 태그 또는 digest 가 필요하며 :latest 는 금지됩니다."
+      reason: Forbidden
+    # 3) readOnlyRootFilesystem 강제
+    - expression: >-
+        variables.allContainers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.readOnlyRootFilesystem) &&
+          c.securityContext.readOnlyRootFilesystem == true)
+      message: "FSI: 컨테이너 루트 파일시스템은 읽기 전용(readOnlyRootFilesystem: true)이어야 합니다."
+      reason: Forbidden
+    # 4) cpu/memory limits 강제
+    - expression: >-
+        variables.allContainers.all(c,
+          has(c.resources) &&
+          has(c.resources.limits) &&
+          has(c.resources.limits.cpu) &&
+          has(c.resources.limits.memory))
+      message: "FSI: 모든 컨테이너에 cpu/memory 리소스 제한(limits)이 필요합니다."
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hardening-fsi
+spec:
+  policyName: hardening-fsi
+  validationActions: [Deny]
+  paramRef:
+    name: hardening-fsi-params
+    namespace: security-scanning
+    parameterNotFoundAction: Deny
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        # opt-in: 라벨이 붙은 네임스페이스에만 FSI 통제 강제
+        - key: hardening.opencsp.io/fsi
+          operator: In
+          values: ["enforce"]

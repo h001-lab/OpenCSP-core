@@ -50,6 +50,23 @@ spec:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
+  name: cluster-hardening
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: cluster-system-configs # helm-controller/네임스페이스 준비 후 스캐너·정책 적용
+  interval: 10m
+  path: ./cluster/hardening
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  wait: true
+  timeout: 10m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
   name: cluster-infrastructure
   namespace: flux-system
 spec:

@@ -1,0 +1,49 @@
+# ── securityContext 일괄 주입 (Kustomize Component) ──
+# git 으로 직접 관리하는 raw 워크로드(Deployment/StatefulSet/DaemonSet/Job/CronJob)에
+# 파드 레벨 securityContext 를 일괄 주입한다.
+#
+# 주의사항:
+#   - 이 컴포넌트는 "같은 kustomize 빌드 안의 리소스"에만 적용된다.
+#     HelmRelease 로 배포되는 앱에는 닿지 않으므로, 그 경우 HelmRelease.spec.postRenderers 를 사용한다. (README 참고)
+#   - 파드 레벨 securityContext(runAsNonRoot / seccompProfile 등)는 각 컨테이너로 상속된다.
+#   - 반면 allowPrivilegeEscalation / readOnlyRootFilesystem / capabilities 는 컨테이너 전용 필드라
+#     kustomize 로 "모든 컨테이너"에 와일드카드 주입할 수 없다. → 컨테이너별로 명시하거나 restricted/FSI VAP 로 강제한다.
+#   - 강제(차단)는 components/restricted VAP 가, "채워넣기(주입)"는 이 컴포넌트가 담당한다.
+#
+# 사용법: 주입을 원하는 레이어의 kustomization.yaml 에 아래를 추가한다.
+#   components:
+#     - ../hardening/components/inject-securitycontext
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  # 파드 레벨 securityContext 주입 (모든 컨테이너로 상속됨)
+  - target:
+      kind: (Deployment|StatefulSet|DaemonSet|ReplicaSet|Job)
+    patch: |
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+  - target:
+      kind: CronJob
+    patch: |
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+  # 컨테이너 레벨 필드는 인덱스 기반으로 명시 주입해야 한다. (아래는 첫 번째 컨테이너 예시)
+  # - target:
+  #     kind: Deployment
+  #     name: my-app
+  #   patch: |
+  #     - op: add
+  #       path: /spec/template/spec/containers/0/securityContext
+  #       value:
+  #         allowPrivilegeEscalation: false
+  #         readOnlyRootFilesystem: true
+  #         capabilities:
+  #           drop: ["ALL"]

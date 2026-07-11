@@ -89,3 +89,12 @@ metadata:
 spec:
   interval: 24h
   url: https://open-telemetry.github.io/opentelemetry-helm-charts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: kubescape
+  namespace: flux-system
+spec:
+  interval: 24h
+  url: https://kubescape.github.io/helm-charts/

@@ -1,0 +1,77 @@
+# ── Pod Security Standards: BASELINE 를 ValidatingAdmissionPolicy 로 강제 ──
+# 특권 컨테이너 / 호스트 네임스페이스 / hostPath / 위험 capability 를 차단한다.
+# 시스템 네임스페이스와 opt-out(hardening.opencsp.io/baseline=ignore) 네임스페이스는 바인딩에서 제외된다.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hardening-baseline
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: allContainers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+        (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+  validations:
+    - expression: >-
+        variables.allContainers.all(c,
+          !has(c.securityContext) ||
+          !has(c.securityContext.privileged) ||
+          c.securityContext.privileged == false)
+      message: "특권(privileged) 컨테이너는 금지됩니다. (PSS baseline)"
+      reason: Forbidden
+    - expression: >-
+        (!has(object.spec.hostNetwork) || object.spec.hostNetwork == false) &&
+        (!has(object.spec.hostPID) || object.spec.hostPID == false) &&
+        (!has(object.spec.hostIPC) || object.spec.hostIPC == false)
+      message: "hostNetwork / hostPID / hostIPC 공유는 금지됩니다. (PSS baseline)"
+      reason: Forbidden
+    - expression: >-
+        !has(object.spec.volumes) ||
+        object.spec.volumes.all(v, !has(v.hostPath))
+      message: "hostPath 볼륨은 금지됩니다. (PSS baseline)"
+      reason: Forbidden
+    - expression: >-
+        variables.allContainers.all(c,
+          !has(c.securityContext) ||
+          !has(c.securityContext.capabilities) ||
+          !has(c.securityContext.capabilities.add) ||
+          c.securityContext.capabilities.add.all(cap,
+            cap in ['AUDIT_WRITE', 'CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'FSETID',
+                    'KILL', 'MKNOD', 'NET_BIND_SERVICE', 'SETFCAP', 'SETGID',
+                    'SETPCAP', 'SETUID', 'SYS_CHROOT']))
+      message: "baseline 허용 목록 외의 Linux capability 추가는 금지됩니다. (PSS baseline)"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hardening-baseline
+spec:
+  policyName: hardening-baseline
+  # 관측 전용: 위반해도 차단하지 않고 kubectl 경고 + audit 로그만 남긴다.
+  # 위반이 없음을 확인한 뒤 [Deny] 로 승격해 전역 강제로 전환한다.
+  validationActions: [Warn, Audit]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        # 컨트롤 플레인 / 인프라 네임스페이스는 제외 (자체 privileged 워크로드 존재)
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - kube-node-lease
+            - kube-public
+            - flux-system
+            - security-scanning
+        # 네임스페이스 단위 opt-out
+        - key: hardening.opencsp.io/baseline
+          operator: NotIn
+          values: ["ignore"]

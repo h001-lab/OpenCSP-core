@@ -1,0 +1,100 @@
+# kube-bench: CIS Kubernetes Benchmark 스캔 (노드 대상)
+# 매일 03:00 에 CronJob 으로 실행하고 결과를 파드 로그(stdout)로 남긴다.
+# 결과는 otel-collector agent(daemonset)가 파드 로그를 수집하므로 별도 파이프라인 없이 관측 가능하다.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kube-bench
+  namespace: security-scanning
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400 # 완료 후 24h 뒤 정리
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: kube-bench
+        spec:
+          hostPID: true # CIS 노드 점검 시 호스트 프로세스/설정 접근 필요
+          restartPolicy: Never
+          tolerations:
+            - operator: Exists # 컨트롤 플레인 포함 어느 노드에서든 실행 가능
+          containers:
+            - name: kube-bench
+              image: docker.io/aquasec/kube-bench:v0.15.6
+              # 벤치마크 버전은 클러스터 버전에 맞춰 자동 감지된다.
+              command: ["kube-bench"]
+              args: ["run", "--targets", "node"]
+              securityContext:
+                # 호스트 설정 파일 읽기가 필요하므로 non-root 강제는 하지 않는다.
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: var-lib-cni
+                  mountPath: /var/lib/cni
+                  readOnly: true
+                - name: var-lib-kubelet
+                  mountPath: /var/lib/kubelet
+                  readOnly: true
+                - name: var-lib-kube-scheduler
+                  mountPath: /var/lib/kube-scheduler
+                  readOnly: true
+                - name: var-lib-kube-controller-manager
+                  mountPath: /var/lib/kube-controller-manager
+                  readOnly: true
+                - name: etc-systemd
+                  mountPath: /etc/systemd
+                  readOnly: true
+                - name: lib-systemd
+                  mountPath: /lib/systemd/
+                  readOnly: true
+                - name: etc-kubernetes
+                  mountPath: /etc/kubernetes
+                  readOnly: true
+                - name: usr-bin
+                  mountPath: /usr/local/mount-from-host/bin
+                  readOnly: true
+                - name: etc-cni-netd
+                  mountPath: /etc/cni/net.d/
+                  readOnly: true
+                - name: opt-cni-bin
+                  mountPath: /opt/cni/bin/
+                  readOnly: true
+          volumes:
+            - name: var-lib-cni
+              hostPath:
+                path: /var/lib/cni
+            - name: var-lib-kubelet
+              hostPath:
+                path: /var/lib/kubelet
+            - name: var-lib-kube-scheduler
+              hostPath:
+                path: /var/lib/kube-scheduler
+            - name: var-lib-kube-controller-manager
+              hostPath:
+                path: /var/lib/kube-controller-manager
+            - name: etc-systemd
+              hostPath:
+                path: /etc/systemd
+            - name: lib-systemd
+              hostPath:
+                path: /lib/systemd
+            - name: etc-kubernetes
+              hostPath:
+                path: /etc/kubernetes
+            - name: usr-bin
+              hostPath:
+                path: /usr/bin
+            - name: etc-cni-netd
+              hostPath:
+                path: /etc/cni/net.d/
+            - name: opt-cni-bin
+              hostPath:
+                path: /opt/cni/bin/

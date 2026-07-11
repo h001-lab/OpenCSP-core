@@ -1,0 +1,91 @@
+# ── Pod Security Standards: RESTRICTED 를 ValidatingAdmissionPolicy 로 강제 ──
+# runAsNonRoot / allowPrivilegeEscalation=false / drop ALL / seccompProfile / capability add 제한.
+# opt-in: 네임스페이스에 hardening.opencsp.io/restricted=enforce 라벨이 있어야 강제된다.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hardening-restricted
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: allContainers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+        (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+    - name: podRunAsNonRoot
+      expression: >-
+        has(object.spec.securityContext) &&
+        has(object.spec.securityContext.runAsNonRoot) &&
+        object.spec.securityContext.runAsNonRoot == true
+    - name: podSeccomp
+      expression: >-
+        has(object.spec.securityContext) &&
+        has(object.spec.securityContext.seccompProfile) &&
+        object.spec.securityContext.seccompProfile.type in ['RuntimeDefault', 'Localhost']
+  validations:
+    # runAsNonRoot (파드 또는 모든 컨테이너 단위로 충족)
+    - expression: >-
+        variables.podRunAsNonRoot ||
+        variables.allContainers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.runAsNonRoot) &&
+          c.securityContext.runAsNonRoot == true)
+      message: "모든 컨테이너는 runAsNonRoot: true 여야 합니다. (PSS restricted)"
+      reason: Forbidden
+    # allowPrivilegeEscalation: false
+    - expression: >-
+        variables.allContainers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.allowPrivilegeEscalation) &&
+          c.securityContext.allowPrivilegeEscalation == false)
+      message: "모든 컨테이너는 allowPrivilegeEscalation: false 여야 합니다. (PSS restricted)"
+      reason: Forbidden
+    # capabilities: drop [ALL]
+    - expression: >-
+        variables.allContainers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.capabilities) &&
+          has(c.securityContext.capabilities.drop) &&
+          c.securityContext.capabilities.drop.exists(d, d == 'ALL'))
+      message: "모든 컨테이너는 capabilities.drop: [ALL] 이어야 합니다. (PSS restricted)"
+      reason: Forbidden
+    # capability add 는 NET_BIND_SERVICE 만 허용
+    - expression: >-
+        variables.allContainers.all(c,
+          !has(c.securityContext) ||
+          !has(c.securityContext.capabilities) ||
+          !has(c.securityContext.capabilities.add) ||
+          c.securityContext.capabilities.add.all(cap, cap == 'NET_BIND_SERVICE'))
+      message: "restricted 에서는 NET_BIND_SERVICE 외 capability 추가가 금지됩니다. (PSS restricted)"
+      reason: Forbidden
+    # seccompProfile: RuntimeDefault | Localhost
+    - expression: >-
+        variables.podSeccomp ||
+        variables.allContainers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.seccompProfile) &&
+          c.securityContext.seccompProfile.type in ['RuntimeDefault', 'Localhost'])
+      message: "seccompProfile 은 RuntimeDefault 또는 Localhost 여야 합니다. (PSS restricted)"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hardening-restricted
+spec:
+  policyName: hardening-restricted
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        # opt-in: 라벨이 붙은 네임스페이스에만 restricted 강제
+        - key: hardening.opencsp.io/restricted
+          operator: In
+          values: ["enforce"]
