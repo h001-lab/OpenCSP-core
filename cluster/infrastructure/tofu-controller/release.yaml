@@ -22,4 +22,6 @@ spec:
     reconciler:
       image:
         repository: ghcr.io/flux-iac/tf-runner
-        tag: latest
+        # latest 금지(hardening-no-latest VAP)에 맞춰 버전 고정.
+        # v0.16.4 는 현재 latest 가 가리키는 semver 태그다.
+        tag: "v0.16.4"

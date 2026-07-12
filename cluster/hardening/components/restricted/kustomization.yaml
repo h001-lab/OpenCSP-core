@@ -2,3 +2,18 @@ apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 resources:
   - vap-restricted.yaml
+
+# ── baseline 바인딩을 전역 Deny 로 오버라이드 ──
+# 이 컴포넌트를 켜면 baseline(관측 전용)까지 실제 차단으로 승격된다.
+# ⚠ 전제: components/baseline 이 먼저 로드되어 있어야 patch 대상이 존재한다.
+#   (hardening/kustomization.yaml 에서 baseline → restricted 순서 유지)
+patches:
+  - target:
+      group: admissionregistration.k8s.io
+      version: v1
+      kind: ValidatingAdmissionPolicyBinding
+      name: hardening-baseline
+    patch: |
+      - op: replace
+        path: /spec/validationActions
+        value: [Deny]

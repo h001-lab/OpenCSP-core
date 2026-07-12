@@ -1,0 +1,59 @@
+# ── 이미지 태그 하드닝: :latest / 무태그 이미지 차단 (상시 Deny) ──
+# baseline/restricted 토글과 무관하게 항상 강제된다.
+#   - :latest 태그 금지 (재현성 없는 배포 방지)
+#   - 명시적 태그 또는 digest(@sha256:...) 없는 이미지 금지
+# 시스템/opt-out 네임스페이스는 바인딩에서 제외한다.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hardening-no-latest
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    - name: allContainers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+        (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+  validations:
+    - expression: >-
+        variables.allContainers.all(c, !c.image.endsWith(':latest'))
+      message: ":latest 태그 이미지는 금지됩니다. 명시적 버전 태그 또는 digest 를 사용하세요."
+      reason: Forbidden
+    # 마지막 '/' 뒤 세그먼트에 ':'(태그)가 있거나, 전체에 '@'(digest)가 있어야 한다.
+    # 레지스트리 포트(registry:5000/img)를 태그로 오인하지 않도록 마지막 세그먼트만 검사한다.
+    - expression: >-
+        variables.allContainers.all(c,
+          c.image.contains('@') ||
+          c.image.substring(c.image.lastIndexOf('/') + 1).contains(':'))
+      message: "이미지에 명시적 태그 또는 digest 가 없습니다. (무태그 = 암묵적 latest 금지)"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hardening-no-latest
+spec:
+  policyName: hardening-no-latest
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        # 컨트롤 플레인 / Flux 네임스페이스는 제외
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - kube-node-lease
+            - kube-public
+            - flux-system
+        # 네임스페이스 단위 opt-out
+        - key: hardening.opencsp.io/no-latest
+          operator: NotIn
+          values: ["ignore"]

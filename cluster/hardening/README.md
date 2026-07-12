@@ -7,17 +7,33 @@ Flux `cluster-hardening` Kustomization(`../flux-system/layers.yaml`)이 이 디�
 
 ```
 hardening/
-├── kustomization.yaml               # 스캐너(상시) + components 토글
+├── kustomization.yaml               # 스캐너·상시정책 + components 토글
 ├── scanning/
 │   ├── namespace.yaml               # security-scanning (PSA privileged)
-│   ├── kube-bench.yaml              # CIS 벤치마크 CronJob
+│   ├── kube-bench.yaml              # CIS 벤치마크 CronJob (+ 전용 SA)
 │   └── kubescape-release.yaml       # kubescape-operator (posture 스캔)
+├── admission/                       # 상시 강제 VAP (토글과 무관)
+│   ├── no-latest.yaml               # :latest/무태그 이미지 차단 (Deny)
+│   └── no-default-sa.yaml           # default SA 사용 금지 (Warn/Audit → 승격)
 └── components/                      # Kustomize Component = 조건 프로필
-    ├── baseline/                    # PSS baseline VAP (전역, opt-out)
-    ├── restricted/                  # PSS restricted VAP (opt-in)
+    ├── baseline/                    # PSS baseline VAP (전역 관측, opt-out)
+    ├── restricted/                  # PSS restricted VAP (켜면 baseline 까지 전역 Deny)
     ├── fsi/                         # 금융보안(FSI) 커스텀 VAP (opt-in, ConfigMap 파라미터)
     └── inject-securitycontext/      # raw 워크로드 securityContext 주입 (재사용)
 ```
+
+## 상시 강제 정책 (`admission/`)
+
+baseline/restricted 토글과 무관하게 항상 적용된다.
+
+| 정책 | 동작 | 내용 | opt-out 라벨 |
+|------|------|------|-------------|
+| `hardening-no-latest` | **Deny** | `:latest` 태그 및 무태그(암묵적 latest) 이미지 차단 | `hardening.opencsp.io/no-latest=ignore` |
+| `hardening-no-default-sa` | **관측(Warn+Audit)** | 파드가 `default` SA 사용 금지 (배포 전용 SA 요구) | `hardening.opencsp.io/default-sa=ignore` |
+
+> `no-default-sa` 는 우선 관측만 한다. 위반 워크로드를 전용 SA 로 옮긴 뒤 `admission/no-default-sa.yaml`
+> 바인딩의 `validationActions` 를 `[Warn, Audit]` → `[Deny]` 로 승격한다.
+> `no-latest` 를 켜기 전, `latest` 를 쓰던 워크로드(예: tofu-runner)는 버전 태그로 고정해야 한다.
 
 ## 조건(프로필) 선택 적용
 
@@ -25,8 +41,8 @@ hardening/
 
 ```yaml
 components:
-  - components/baseline      # 전역 최소 강제
-  # - components/restricted  # 강한 강제 (opt-in ns)
+  - components/baseline      # 전역 관측 (기본)
+  # - components/restricted  # 켜면 baseline 까지 전역 Deny 로 승격
   # - components/fsi         # 금융보안 커스텀 (opt-in ns)
 ```
 
@@ -35,18 +51,24 @@ components:
 | 프로필 | 컴포넌트 로드 | 동작 | 범위 | 네임스페이스 라벨 |
 |--------|--------------|------|------|-------------------|
 | baseline | `components/baseline` | **관측(Warn+Audit)** — 차단 안 함 | 전역 (시스템/opt-out 제외) | opt-out: `hardening.opencsp.io/baseline=ignore` |
-| restricted | `components/restricted` | **강제(Deny)** | opt-in | `hardening.opencsp.io/restricted=enforce` |
+| restricted | `components/restricted` | **강제(Deny)** — 켜면 baseline 도 Deny 로 오버라이드 | 전역 (시스템/opt-out 제외) | opt-out: `hardening.opencsp.io/restricted=ignore` |
 | fsi | `components/fsi` | **강제(Deny)** | opt-in | `hardening.opencsp.io/fsi=enforce` |
 
-> baseline 은 기본적으로 위반을 관측만 한다. 위반이 없음을 확인한 뒤 `components/baseline/vap-baseline.yaml`
-> 의 binding `validationActions` 를 `[Warn, Audit]` → `[Deny]` 로 승격하면 전역 강제로 전환된다.
+> **baseline 만 켠 상태**는 위반을 관측만 한다(전역). 위반이 없음을 확인한 뒤 그대로 `components/restricted`
+> 를 주석 해제하면, restricted 의 kustomize patch 가 baseline 바인딩을 `[Warn, Audit]` → `[Deny]` 로
+> 오버라이드하고 restricted 규칙도 전역 Deny 로 적용된다. 즉 **restricted 를 켜는 순간 전역 강제로 전환**된다.
+> ⚠ restricted 는 baseline 바인딩을 patch 하므로 `components/baseline` 이 함께 켜져 있어야 한다.
 
-예) 특정 네임스페이스에 restricted + FSI 강제:
+특정 네임스페이스만 강제에서 빼려면 opt-out 라벨을 붙인다:
 
 ```bash
-kubectl label ns my-namespace \
-  hardening.opencsp.io/restricted=enforce \
-  hardening.opencsp.io/fsi=enforce
+kubectl label ns my-namespace hardening.opencsp.io/restricted=ignore
+```
+
+예) 특정 네임스페이스에 FSI(opt-in) 추가 강제:
+
+```bash
+kubectl label ns my-namespace hardening.opencsp.io/fsi=enforce
 ```
 
 ### FSI 커스텀 조건 편집

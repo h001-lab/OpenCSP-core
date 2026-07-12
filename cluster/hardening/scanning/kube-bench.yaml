@@ -1,6 +1,15 @@
 # kube-bench: CIS Kubernetes Benchmark 스캔 (노드 대상)
 # 매일 03:00 에 CronJob 으로 실행하고 결과를 파드 로그(stdout)로 남긴다.
 # 결과는 otel-collector agent(daemonset)가 파드 로그를 수집하므로 별도 파이프라인 없이 관측 가능하다.
+---
+# 배포 전용 ServiceAccount (default SA 미사용, 토큰 자동 마운트 비활성)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-bench
+  namespace: security-scanning
+automountServiceAccountToken: false
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -21,6 +30,8 @@ spec:
             app.kubernetes.io/name: kube-bench
         spec:
           hostPID: true # CIS 노드 점검 시 호스트 프로세스/설정 접근 필요
+          serviceAccountName: kube-bench
+          automountServiceAccountToken: false
           restartPolicy: Never
           tolerations:
             - operator: Exists # 컨트롤 플레인 포함 어느 노드에서든 실행 가능

@@ -1,0 +1,51 @@
+# ── ServiceAccount 하드닝: default SA 사용 금지 (우선 관측) ──
+# 파드는 배포 단위 전용 ServiceAccount 를 사용해야 한다. default SA 는 과도한 자동 마운트/
+# 공유 권한 위험이 있으므로 배포별 SA 로 분리한다.
+#
+# 도입 단계에서는 [Warn, Audit] 로 관측만 한다. 위반 워크로드를 모두 전용 SA 로 옮긴 뒤
+# validationActions 를 [Deny] 로 승격하면 전역 강제로 전환된다.
+#
+# 참고: ServiceAccount admission 컨트롤러가 VAP 이전 단계에서 빈 serviceAccountName 을
+# 'default' 로 채우므로, 아래 검사는 명시 SA 여부를 정확히 판별한다.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: hardening-no-default-sa
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: >-
+        has(object.spec.serviceAccountName) &&
+        object.spec.serviceAccountName != '' &&
+        object.spec.serviceAccountName != 'default'
+      message: "파드는 'default' 가 아닌 배포 전용 ServiceAccount 를 지정해야 합니다."
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: hardening-no-default-sa
+spec:
+  policyName: hardening-no-default-sa
+  # 관측 전용: 위반해도 차단하지 않고 kubectl 경고 + audit 로그만 남긴다.
+  # 위반이 정리되면 [Deny] 로 승격한다.
+  validationActions: [Warn, Audit]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - kube-node-lease
+            - kube-public
+            - flux-system
+        - key: hardening.opencsp.io/default-sa
+          operator: NotIn
+          values: ["ignore"]

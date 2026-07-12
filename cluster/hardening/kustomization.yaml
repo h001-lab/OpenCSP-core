@@ -9,6 +9,9 @@ resources:
   - scanning/kubescape-release.yaml  # posture 스캔 (HelmRelease)
   - scorecard/rbac.yaml              # scorecard 전용 최소 권한 RBAC
   - scorecard/cronjob.yaml           # kube-bench+kubescape 집계 → stdout (CR 미생성)
+  # 상시 강제 admission 정책 (baseline/restricted 토글과 무관)
+  - admission/no-latest.yaml         # :latest/무태그 이미지 차단 (Deny)
+  - admission/no-default-sa.yaml     # default SA 사용 금지 (우선 Warn/Audit → 승격)
 
 # ── 조건 선택 적용 (주석 해제로 on/off) ──
 # baseline : 전역 강제 (시스템/opt-out 네임스페이스 제외), PSS baseline
