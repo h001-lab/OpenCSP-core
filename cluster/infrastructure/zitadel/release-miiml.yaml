@@ -33,6 +33,22 @@ spec:
     fullnameOverride: "zitadel-miiml"
     zitadel:
       configmapConfig:
+        # Break-glass admin path. The setup Job only writes /login-client/pat during
+        # FirstInstance, which is skipped on an existing instance, so the login-client
+        # Secret was never created and login v2 stayed down. With Features.LoginV2
+        # active every OIDC authorize redirects to that dead login, meaning no one can
+        # sign in to fix it by hand. A SystemAPIUser authenticates with a self-signed
+        # JWT instead of the login UI, so it stays usable when the login path is broken.
+        # Private key is held out-of-band; only the public key belongs here.
+        SystemAPIUsers:
+          - systemuser:
+              KeyData: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUF1Q1dkRXVLME5hOE1wVy8rMjI0egpUM2NlZXNmOWRTQTBpV01BdTBVQTVtUzJuMjN2M1gyd3A2SGdtT2dGelJPVWJmR0U1WGc1aWg1VEhIcFkvZXNFCkQ1UmlsQVRMcnpUNThSQjNPSlBDM3RTemZZWFZvTlVmZktraDhERzR5SUtVS09iZ0MvQ1JCOExhSDloU0JRUDcKT2I4M2xIUHhGeWpJNStkcGQ0Q2ljQ2JBMXVqT3FDTnFvUjFKRW41RTFEVi9VUkhXUlpSU3dyeFVFU2dQT1pIWAppYnQzV1ZLaWt3cmtDaThaamZCSjRsVlhCMERuTUIwTUJibWNlditFVTQrNVpVYW9lWmpDemNSQ1BLdGJicGZGCmMvK3phdzhEdmw0eXp4TTNnQW9SQ2VKT2pCYzFtdDFlT1VoTEVJWjJVbHFjeFp0R2FCYmdKdWUzMmxWM0tTWDYKcHdJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==
+              Memberships:
+                - MemberType: System
+                  Roles:
+                    - "SYSTEM_OWNER"
+                    - "IAM_OWNER"
+                    - "ORG_OWNER"
         ExternalDomain: zitadel.miiml.org
         ExternalPort: 443
         ExternalSecure: true
